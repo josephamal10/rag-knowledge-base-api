@@ -1,0 +1,52 @@
+{
+  "name": "rag-knowledge-base-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RAG knowledge-base API (SQLite + Upstash Vector Hybrid + Gemini) using NestJS",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "start:prod": "node dist/main.js",
+    "start:mcp": "ts-node src/mcp/mcp-server.ts",
+    "migrate:upstash": "ts-node --transpile-only src/scripts/migrate-to-upstash.ts",
+    "migrate:namespace": "ts-node --transpile-only src/scripts/migrate-default-ns-to-course.ts"
+  },
+  "dependencies": {
+    "@google/genai": "latest",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@mozilla/readability": "^0.6.0",
+    "@nestjs/common": "latest",
+    "@nestjs/config": "latest",
+    "@nestjs/core": "latest",
+    "@nestjs/platform-express": "latest",
+    "@nestjs/swagger": "^11.4.6",
+    "@nestjs/typeorm": "latest",
+    "@upstash/vector": "^1.2.3",
+    "better-sqlite3": "^12.11.1",
+    "dotenv": "latest",
+    "jsdom": "^29.1.1",
+    "mammoth": "latest",
+    "multer": "latest",
+    "pdf-parse": "latest",
+    "reflect-metadata": "latest",
+    "rxjs": "latest",
+    "sqlite3": "latest",
+    "typeorm": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "latest",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "latest",
+    "@types/jsdom": "^30.0.0",
+    "@types/multer": "latest",
+    "@types/node": "latest",
+    "ts-node": "latest",
+    "typescript": "^5.7.3"
+  }
+}

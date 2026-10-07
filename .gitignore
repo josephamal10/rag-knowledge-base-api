@@ -1,0 +1,25 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets — never commit real keys
+.env
+.env.*
+!.env.example
+
+# Editor / local tooling
+.cursor/
+*.log
+
+# Backups / archives
+*.zip
+
+# Uploaded source files — keep folders, ignore content
+docs/rules/*
+!docs/rules/.gitkeep
+incoming/*
+!incoming/.gitkeep
+
+# SQLite database (created at runtime)
+data/*
+!data/.gitkeep
