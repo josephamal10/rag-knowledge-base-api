@@ -8,7 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 // utils/helpers
 import { join } from 'path';
@@ -16,6 +16,7 @@ import { join } from 'path';
 import { AnswerModule } from './answer/answer.module';
 import { AppController } from './app.controller';
 import { ChunkingModule } from './chunking/chunking.module';
+import { ClientIpThrottlerGuard } from './common/client-ip-throttler.guard';
 import { CommonModule } from './common/common.module';
 import { envValidationSchema } from './config/env.validation';
 import { EmbeddingsModule } from './embeddings/embeddings.module';
@@ -59,7 +60,7 @@ import { VectorStoreModule } from './vector-store/vector-store.module';
     AnswerModule,
   ],
   controllers: [AppController],
-  providers:   [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers:   [{ provide: APP_GUARD, useClass: ClientIpThrottlerGuard }],
 })
 export class AppModule {}
 
