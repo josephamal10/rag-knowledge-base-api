@@ -1,0 +1,32 @@
+# Render Blueprint for the backend API — see DEPLOY.md.
+# Render → New → Blueprint → pick this repo. Secrets marked `sync: false` are entered in the dashboard.
+services:
+  - type: web
+    name: rag-knowledge-base-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npm run build
+    # Free instances have no persistent disk, so SQLite starts empty after a restart:
+    # re-seed the demo club (vectors already in Upstash are reused, nothing is re-embedded).
+    startCommand: npm run seed:prod -- --if-empty; npm run start:prod
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: UPSTASH_VECTOR_REST_URL
+        sync: false
+      - key: UPSTASH_VECTOR_REST_TOKEN
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false                 # your Vercel URL, e.g. https://rag-knowledge-base.vercel.app
+      - key: ADMIN_API_KEY
+        generateValue: true         # locks ingest/edit/delete on the public demo
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "20"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: EMBEDDING_DIMENSION
+        value: "1536"

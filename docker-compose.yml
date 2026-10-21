@@ -1,0 +1,27 @@
+# Run the whole app with one command:  docker compose up --build
+#   Frontend: http://localhost:8080   API + Swagger: http://localhost:3000/api
+# Needs a .env file in this folder (copy .env.example and add your Gemini + Upstash keys).
+# Ports already taken? Override them, e.g.  API_PORT=3100 WEB_PORT=8180 docker compose up --build
+services:
+  backend:
+    build: .
+    env_file: .env
+    environment:
+      PORT: "3000"
+      TRUST_PROXY: "true"          # requests arrive through the frontend's nginx
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      - backend-data:/app/data     # keeps the SQLite database between restarts
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:

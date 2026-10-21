@@ -1,0 +1,16 @@
+node_modules
+dist
+data
+incoming
+docs
+frontend
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+*.zip
+CLAUDE.md
+.claude
+coverage
