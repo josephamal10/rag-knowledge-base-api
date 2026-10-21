@@ -72,6 +72,16 @@ export class RulesService {
     }
   }
 
+  /** Remove every SQLite row for one course (run /reindex afterwards to drop its vectors). */
+  async deleteByCourseId(courseId: string): Promise<number> {
+    const result = await this.rulesRepository.delete({ courseId: normalizeCourseId(courseId) });
+    return result.affected ?? 0;
+  }
+
+  async countByCourseId(courseId: string): Promise<number> {
+    return this.rulesRepository.count({ where: { courseId: normalizeCourseId(courseId) } });
+  }
+
   async getAllRules(): Promise<RuleEntity[]> {
     return this.rulesRepository.find({ order: { id: 'ASC' } });
   }

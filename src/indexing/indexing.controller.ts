@@ -4,6 +4,7 @@ import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 // utils/helpers
 import { CourseIdSchema } from '../common/course-id';
+import { AdminOnly } from '../common/admin-key.guard';
 import { ErrorService } from '../common/error.service';
 import { ReindexBodyDto, ReindexResponseDto } from './dto/reindex.dto';
 import { IndexingService } from './indexing.service';
@@ -16,6 +17,7 @@ export class IndexingController {
     private readonly indexingService: IndexingService,
   ) {}
 
+  @AdminOnly()
   @Post('reindex')
   @ApiOperation({
     summary:     'Reindex SQLite → Upstash Vector (one course namespace)',

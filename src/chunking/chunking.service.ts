@@ -39,8 +39,14 @@ export class ChunkingService {
         continue;
       }
 
+      // Start the overlap at a word boundary so chunks don't begin mid-word.
+      let nextStart = endIndex - safeOverlap;
+      const wordStart = cleanedText.indexOf(' ', nextStart);
+      if (wordStart !== -1 && wordStart < endIndex) {
+        nextStart = wordStart + 1;
+      }
+
       // Always move forward so overlap cannot rewind into an infinite loop.
-      const nextStart = endIndex - safeOverlap;
       startIndex = nextStart <= startIndex ? endIndex : nextStart;
     }
 

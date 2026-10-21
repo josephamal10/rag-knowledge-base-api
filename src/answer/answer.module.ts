@@ -8,11 +8,12 @@ import { AnswerController } from './answer.controller';
 import { AnswerService } from './answer.service';
 import { CategoryClassifierService } from './category-classifier.service';
 import { QuestionScopeService } from './question-scope.service';
+import { QueryRewriteService } from './query-rewrite.service';
 
 @Module({
   imports: [CommonModule, SearchModule],
   controllers: [AnswerController],
-  providers: [AnswerService, CategoryClassifierService, QuestionScopeService],
+  providers: [AnswerService, CategoryClassifierService, QuestionScopeService, QueryRewriteService],
   exports: [AnswerService, CategoryClassifierService, QuestionScopeService],
 })
 export class AnswerModule {}

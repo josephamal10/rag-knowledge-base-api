@@ -9,6 +9,7 @@ import {
 } from '@nestjs/swagger';
 
 // utils/helpers
+import { AdminOnly } from '../common/admin-key.guard';
 import { ErrorService } from '../common/error.service';
 import { rejectLegacyRegionWithoutCourseId } from '../common/legacy-region';
 import {
@@ -29,6 +30,7 @@ export class RulesController {
     private readonly rulesService: RulesService,
   ) {}
 
+  @AdminOnly()
   @Post()
   @ApiOperation({ summary: 'Create a rule chunk' })
   @ApiBody({ type: CreateRuleBodyDto })
@@ -90,6 +92,7 @@ export class RulesController {
     return this.rulesService.getRuleById(id);
   }
 
+  @AdminOnly()
   @Put(':id')
   @ApiOperation({ summary: 'Update a rule chunk' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
@@ -115,6 +118,7 @@ export class RulesController {
     return this.rulesService.updateRule(id, parsedBody.data);
   }
 
+  @AdminOnly()
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a rule chunk' })
   @ApiParam({ name: 'id', type: Number, example: 1 })

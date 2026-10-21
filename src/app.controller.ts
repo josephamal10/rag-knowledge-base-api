@@ -1,6 +1,7 @@
 // external modules
 import { Controller, Get } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 
 class HealthResponseDto {
   @ApiProperty({ example: 'ok' })
@@ -8,6 +9,7 @@ class HealthResponseDto {
 }
 
 @ApiTags('health')
+@SkipThrottle()                                                                  // Uptime checks shouldn't hit the rate limit
 @Controller()
 export class AppController {
   @Get('health')

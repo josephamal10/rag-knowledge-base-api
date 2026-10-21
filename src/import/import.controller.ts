@@ -15,6 +15,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { extname, join } from 'path';
 
 import { CourseIdSchema } from '../common/course-id';
+import { AdminOnly } from '../common/admin-key.guard';
 import { ErrorService } from '../common/error.service';
 import { rejectLegacyRegionWithoutCourseId } from '../common/legacy-region';
 import { KbCategorySchema, KB_CATEGORIES } from '../common/kb-category';
@@ -37,6 +38,7 @@ export class ImportController {
     private readonly importService: ImportService,
   ) {}
 
+  @AdminOnly()
   @Post('import')
   @ApiOperation({
     summary:     'Import a PDF / DOCX / TXT file',

@@ -4,6 +4,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 // utils/helpers
 import { KB_CATEGORIES } from '../../common/kb-category';
 
+export class ChatTurnDto {
+  @ApiProperty({ enum: ['user', 'assistant'], example: 'user' })
+  role: 'user' | 'assistant';
+
+  @ApiProperty({ example: 'What time is check-in?' })
+  content: string;
+}
+
 export class AskDto {
   @ApiProperty({
     description: 'Natural-language question answered from the indexed club / rules corpus',
@@ -17,6 +25,32 @@ export class AskDto {
     example:     'demo-club',
   })
   courseId: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Recent conversation (oldest first). Lets follow-ups such as "and check-out?" be understood. ' +
+      'Max 20 turns; only the last few are used.',
+    type:    [ChatTurnDto],
+    example: [],
+  })
+  history?: ChatTurnDto[];
+}
+
+export class AnswerSourceDto {
+  @ApiProperty({ description: 'Vector id (SHA-256 of the chunk text)', example: '3f2a…' })
+  id: string;
+
+  @ApiProperty({ description: 'The chunk text the answer was grounded in', example: 'Green fees: weekdays $45 …' })
+  text: string;
+
+  @ApiPropertyOptional({ enum: KB_CATEGORIES, nullable: true, example: 'golf-rules' })
+  category: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: null })
+  title: string | null;
+
+  @ApiPropertyOptional({ description: 'Hybrid (RRF) relevance score', nullable: true, example: 0.42 })
+  score: number | null;
 }
 
 export class AskResponseDto {
@@ -41,9 +75,8 @@ export class AskResponseDto {
   categories: string[];
 
   @ApiProperty({
-    description:
-      'True when no search ran (vague category, or broad single-category overview ask)',
-    example: false,
+    description: 'True when the reply asks the user to clarify instead of answering',
+    example:     false,
   })
   needsClarification: boolean;
 
@@ -55,4 +88,16 @@ export class AskResponseDto {
     example:  'specific',
   })
   scope: 'broad' | 'specific' | null;
+
+  @ApiProperty({
+    description: 'Chunks the answer was grounded in (empty when it could not answer)',
+    type:        [AnswerSourceDto],
+  })
+  sources: AnswerSourceDto[];
+
+  @ApiProperty({
+    description: 'The question actually searched — follow-ups are rewritten using history',
+    example:     'What are the weekend green fees?',
+  })
+  standaloneQuestion: string;
 }

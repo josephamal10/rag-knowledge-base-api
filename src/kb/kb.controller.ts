@@ -3,6 +3,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 // utils/helpers
+import { AdminOnly } from '../common/admin-key.guard';
 import { ErrorService } from '../common/error.service';
 import { rejectLegacyRegionWithoutCourseId } from '../common/legacy-region';
 import { ImportService } from '../import/import.service';
@@ -26,6 +27,7 @@ export class KbController {
     private readonly kbLinkJobService: KbLinkJobService,
   ) {}
 
+  @AdminOnly()
   @Post('text')
   @ApiOperation({
     summary:     'Add pasted text to the knowledge base',
@@ -57,6 +59,7 @@ export class KbController {
     );
   }
 
+  @AdminOnly()
   @Post('link')
   @ApiOperation({
     summary:     'Queue one or more webpage URLs for background KB ingest',

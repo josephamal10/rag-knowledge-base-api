@@ -11,9 +11,25 @@ import { SearchService } from '../search/search.service';
 import { VectorStoreQueryResult } from '../vector-store/vector-store.service';
 import { CategoryClassifierService } from './category-classifier.service';
 import { QuestionScope, QuestionScopeService } from './question-scope.service';
+import { QueryRewriteService } from './query-rewrite.service';
 
 const ANSWER_MODEL_ID = 'gemini-3.1-flash-lite';
 const NO_ANSWER = 'NO_ANSWER';                                                   // Sentinel the model returns when context lacks the answer
+const NO_INFO_MESSAGE = "I don't have information about that in the available documents.";
+
+export type ChatTurn = {
+  role:    'user' | 'assistant';
+  content: string;
+};
+
+/** A retrieved chunk the answer was grounded in (returned so clients can show citations). */
+export type AnswerSource = {
+  id:       string;
+  text:     string;
+  category: string | null;
+  title:    string | null;
+  score:    number | null;
+};
 
 export type AskResult = {
   answer:             string;
@@ -21,7 +37,25 @@ export type AskResult = {
   categories:         KbCategory[];
   needsClarification: boolean;
   scope:              QuestionScope | null;
+  sources:            AnswerSource[];
+  standaloneQuestion: string;                                                    // Follow-ups rewritten with history
 };
+
+export type AskStreamEvent =
+  | { type: 'meta'; courseId: CourseId; categories: KbCategory[]; scope: QuestionScope | null; standaloneQuestion: string }
+  | { type: 'delta'; text: string }
+  | { type: 'done'; result: AskResult };
+
+/** Either a finished reply (clarification, no hits) or the inputs needed to generate a grounded answer. */
+type AnswerPlan =
+  | { kind: 'final'; result: AskResult }
+  | {
+      kind:          'generate';
+      base:          Omit<AskResult, 'answer' | 'needsClarification' | 'sources'>;
+      searchResults: VectorStoreQueryResult[];
+      noAnswer:      { answer: string; needsClarification: boolean };            // Used when the model returns NO_ANSWER
+      apiKey:        string;
+    };
 
 @Injectable()
 export class AnswerService {
@@ -33,9 +67,80 @@ export class AnswerService {
     private readonly searchService: SearchService,
     private readonly categoryClassifier: CategoryClassifierService,
     private readonly questionScopeService: QuestionScopeService,
+    private readonly queryRewriteService: QueryRewriteService,
   ) {}
 
-  async generateAnswer(question: string, courseId: string): Promise<AskResult> {
+  async generateAnswer(question: string, courseId: string, history: ChatTurn[] = []): Promise<AskResult> {
+    const plan = await this.plan(question, courseId, history);
+    if (plan.kind === 'final') {
+      return plan.result;
+    }
+
+    const prompt = this.buildPrompt(plan.base.standaloneQuestion, plan.searchResults);
+    const genAI = new GoogleGenAI({ apiKey: plan.apiKey });
+    const response = await genAI.models.generateContent({ model: ANSWER_MODEL_ID, contents: prompt });
+
+    return this.finish(plan, (response.text ?? '').trim());
+  }
+
+  /**
+   * Same pipeline as generateAnswer, but the answer text arrives as deltas.
+   * Text is held back while it could still be the NO_ANSWER sentinel, so clients never see it.
+   */
+  async *streamAnswer(
+    question: string,
+    courseId: string,
+    history: ChatTurn[] = [],
+  ): AsyncGenerator<AskStreamEvent> {
+    const plan = await this.plan(question, courseId, history);
+    if (plan.kind === 'final') {
+      yield { type: 'meta', ...this.metaOf(plan.result) };
+      yield { type: 'delta', text: plan.result.answer };
+      yield { type: 'done', result: plan.result };
+      return;
+    }
+
+    yield {
+      type:               'meta',
+      courseId:           plan.base.courseId,
+      categories:         plan.base.categories,
+      scope:              plan.base.scope,
+      standaloneQuestion: plan.base.standaloneQuestion,
+    };
+
+    const prompt = this.buildPrompt(plan.base.standaloneQuestion, plan.searchResults);
+    const genAI = new GoogleGenAI({ apiKey: plan.apiKey });
+    const stream = await genAI.models.generateContentStream({ model: ANSWER_MODEL_ID, contents: prompt });
+
+    let full = '';
+    let started = false;
+    for await (const chunk of stream) {
+      const text = chunk.text ?? '';
+      full += text;
+
+      if (!started) {
+        const lead = full.trimStart();
+        if (NO_ANSWER.startsWith(lead) || lead.startsWith(NO_ANSWER)) {
+          continue;                                                              // Could still be (or is) the sentinel
+        }
+        started = true;
+        yield { type: 'delta', text: lead };
+        continue;
+      }
+      if (text) {
+        yield { type: 'delta', text };
+      }
+    }
+
+    const result = this.finish(plan, full.trim());
+    if (!started) {
+      yield { type: 'delta', text: result.answer };
+    }
+    yield { type: 'done', result };
+  }
+
+  /** Validate, rewrite follow-ups, route by topic and retrieve — everything before generation. */
+  private async plan(question: string, courseId: string, history: ChatTurn[]): Promise<AnswerPlan> {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       throw this.errorService.invalidRequest('GEMINI_API_KEY is missing in environment');
@@ -50,35 +155,38 @@ export class AnswerService {
       });
     }
 
-    const classification = await this.categoryClassifier.classify(question);
+    // "and check-out?" → "What time is check-out at the lodge?" so routing and search work on follow-ups.
+    const standaloneQuestion = history.length
+      ? await this.queryRewriteService.rewrite(question, history)
+      : question;
+
+    const classification = await this.categoryClassifier.classify(standaloneQuestion);
     const categories = classification.categories;
+    const base = { courseId: normalizedCourseId, categories, standaloneQuestion };
 
     if (categories.length === 0) {
       // No category picked: search the whole course first; only ask the caller to
       // narrow down when nothing in the documents answers the question.
-      const searchResults = await this.searchService.search(question, 8, {
+      const searchResults = await this.searchService.search(standaloneQuestion, 8, {
         courseId: normalizedCourseId,
       });
-      const answer = searchResults.length
-        ? await this.generateGroundedAnswer(question, searchResults, apiKey)
-        : null;
-
       this.logger.log(
         `Ask unrouted: courseId=${normalizedCourseId} hits=${searchResults.length} ` +
-          `answered=${answer !== null} reason=${classification.reason || 'none'}`,
+          `reason=${classification.reason || 'none'}`,
       );
-      return {
-        answer:             answer ?? this.buildClarifyMessage(),
-        courseId:           normalizedCourseId,
-        categories:         [],
-        needsClarification: answer === null,
-        scope:              null,
-      };
+
+      const clarify = { answer: this.buildClarifyMessage(), needsClarification: true };
+      if (!searchResults.length) {
+        return { kind: 'final', result: { ...base, ...clarify, scope: null, sources: [] } };
+      }
+      return { kind: 'generate', base: { ...base, scope: null }, searchResults, noAnswer: clarify, apiKey };
     }
+
+    const noInfo = { answer: NO_INFO_MESSAGE, needsClarification: false };
 
     if (categories.length === 1) {
       const category = categories[0];
-      const scopeResult = await this.questionScopeService.detectScope(question, category);
+      const scopeResult = await this.questionScopeService.detectScope(standaloneQuestion, category);
 
       if (scopeResult.scope === 'broad') {
         this.logger.log(
@@ -86,15 +194,18 @@ export class AnswerService {
             `reason=${scopeResult.reason || 'none'}`,
         );
         return {
-          answer:             this.buildBroadClarifyMessage(category),
-          courseId:           normalizedCourseId,
-          categories,
-          needsClarification: true,
-          scope:              'broad',
+          kind:   'final',
+          result: {
+            ...base,
+            answer:             this.buildBroadClarifyMessage(category),
+            needsClarification: true,
+            scope:              'broad',
+            sources:            [],
+          },
         };
       }
 
-      const searchResults = await this.searchService.search(question, 8, {
+      const searchResults = await this.searchService.search(standaloneQuestion, 8, {
         courseId: normalizedCourseId,
         category,
       });
@@ -102,17 +213,11 @@ export class AnswerService {
         `Ask routed: courseId=${normalizedCourseId} categories=[${category}] ` +
           `scope=specific hits=${searchResults.length}`,
       );
-      return {
-        answer:             await this.answerOrNoInfo(question, searchResults, apiKey),
-        courseId:           normalizedCourseId,
-        categories,
-        needsClarification: false,
-        scope:              'specific',
-      };
+      return { kind: 'generate', base: { ...base, scope: 'specific' }, searchResults, noAnswer: noInfo, apiKey };
     }
 
     const searchResults = await this.searchService.searchAcrossCategories(
-      question,
+      standaloneQuestion,
       categories,
       8,
       normalizedCourseId,
@@ -121,31 +226,23 @@ export class AnswerService {
       `Ask routed: courseId=${normalizedCourseId} categories=[${categories.join(', ')}] ` +
         `scope=null hits=${searchResults.length}`,
     );
+    return { kind: 'generate', base: { ...base, scope: null }, searchResults, noAnswer: noInfo, apiKey };
+  }
+
+  /** Turn the model's raw text into the final result; NO_ANSWER (or empty) falls back to plan.noAnswer. */
+  private finish(plan: Extract<AnswerPlan, { kind: 'generate' }>, text: string): AskResult {
+    if (!text || text.includes(NO_ANSWER)) {
+      return { ...plan.base, ...plan.noAnswer, sources: [] };
+    }
     return {
-      answer:             await this.answerOrNoInfo(question, searchResults, apiKey),
-      courseId:           normalizedCourseId,
-      categories,
+      ...plan.base,
+      answer:             text,
       needsClarification: false,
-      scope:              null,
+      sources:            plan.searchResults.map((r) => this.toSource(r)),
     };
   }
 
-  /** Grounded answer, or the standard "no information" reply when the context doesn't cover it. */
-  private async answerOrNoInfo(
-    question: string,
-    searchResults: VectorStoreQueryResult[],
-    apiKey: string,
-  ): Promise<string> {
-    const answer = await this.generateGroundedAnswer(question, searchResults, apiKey);
-    return answer ?? "I don't have information about that in the available documents.";
-  }
-
-  /** Returns the model's answer, or null when the context does not answer the question. */
-  private async generateGroundedAnswer(
-    question: string,
-    searchResults: VectorStoreQueryResult[],
-    apiKey: string,
-  ): Promise<string | null> {
+  private buildPrompt(question: string, searchResults: VectorStoreQueryResult[]): string {
     const context = searchResults
       .map((r, idx) => {
         const title = r.metadata?.title ? `Title: ${r.metadata.title}` : '';
@@ -157,9 +254,10 @@ export class AnswerService {
       })
       .join('\n\n---\n\n');
 
-    const prompt = [
+    return [
       'Answer using ONLY the context below.',
       `If the answer isn't in the context, reply with exactly ${NO_ANSWER} and nothing else.`,
+      `If the message is only a greeting or small talk (not a question), also reply with exactly ${NO_ANSWER}.`,
       'Reply in plain, friendly sentences suitable for reading aloud to a caller.',
       'Do not mention the context, excerpt numbers, categories or labels — just give the answer.',
       '',
@@ -168,15 +266,27 @@ export class AnswerService {
       '',
       `Question: ${question}`,
     ].join('\n');
+  }
 
-    const genAI = new GoogleGenAI({ apiKey });
-    const response = await genAI.models.generateContent({
-      model:    ANSWER_MODEL_ID,
-      contents: prompt,
-    });
+  private toSource(r: VectorStoreQueryResult): AnswerSource {
+    const category = r.metadata?.category;
+    const title = r.metadata?.title;
+    return {
+      id:       r.id,
+      text:     r.text ?? '',
+      category: typeof category === 'string' && category ? category : null,
+      title:    typeof title === 'string' && title ? title : null,
+      score:    typeof r.score === 'number' ? r.score : null,
+    };
+  }
 
-    const text = (response.text ?? '').trim();
-    return !text || text.includes(NO_ANSWER) ? null : text;
+  private metaOf(result: AskResult) {
+    return {
+      courseId:           result.courseId,
+      categories:         result.categories,
+      scope:              result.scope,
+      standaloneQuestion: result.standaloneQuestion,
+    };
   }
 
   private buildClarifyMessage(): string {

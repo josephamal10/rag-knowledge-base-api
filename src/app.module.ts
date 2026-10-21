@@ -6,7 +6,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 // external modules
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 // utils/helpers
 import { join } from 'path';
@@ -32,6 +34,13 @@ import { VectorStoreModule } from './vector-store/vector-store.module';
       // Merge process.env so MCP/dotenv-injected keys are visible to Zod validate.
       validate: (config) => envValidationSchema.parse({ ...process.env, ...config }),
     }),
+    // Per-IP rate limit so a public demo can't burn through the Gemini quota.
+    ThrottlerModule.forRootAsync({
+      inject:     [ConfigService],
+      useFactory: (config: ConfigService) => [
+        { ttl: 60_000, limit: config.get<number>('RATE_LIMIT_PER_MINUTE') ?? 30 },
+      ],
+    }),
     CommonModule,
     TypeOrmModule.forRoot({
       type: 'better-sqlite3',
@@ -50,6 +59,7 @@ import { VectorStoreModule } from './vector-store/vector-store.module';
     AnswerModule,
   ],
   controllers: [AppController],
+  providers:   [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}
 

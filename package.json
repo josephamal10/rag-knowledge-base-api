@@ -13,6 +13,10 @@
     "build": "nest build",
     "start:prod": "node dist/main.js",
     "start:mcp": "ts-node src/mcp/mcp-server.ts",
+    "seed": "ts-node --transpile-only src/scripts/seed-demo.ts",
+    "seed:prod": "node dist/scripts/seed-demo.js",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "test": "jest",
     "migrate:upstash": "ts-node --transpile-only src/scripts/migrate-to-upstash.ts",
     "migrate:namespace": "ts-node --transpile-only src/scripts/migrate-default-ns-to-course.ts"
   },
@@ -25,6 +29,7 @@
     "@nestjs/core": "latest",
     "@nestjs/platform-express": "latest",
     "@nestjs/swagger": "^11.4.6",
+    "@nestjs/throttler": "^6.7.1",
     "@nestjs/typeorm": "latest",
     "@upstash/vector": "^1.2.3",
     "better-sqlite3": "^12.11.1",
@@ -43,9 +48,12 @@
     "@nestjs/cli": "latest",
     "@types/better-sqlite3": "^7.6.13",
     "@types/express": "latest",
+    "@types/jest": "^30.0.0",
     "@types/jsdom": "^30.0.0",
     "@types/multer": "latest",
     "@types/node": "latest",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.15",
     "ts-node": "latest",
     "typescript": "^5.7.3"
   }

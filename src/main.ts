@@ -9,6 +9,7 @@ import { mkdirSync } from 'fs';
 import { join } from 'path';
 
 import { AppModule } from './app.module';
+import { ADMIN_KEY_HEADER, ADMIN_KEY_SECURITY } from './common/admin-key.guard';
 import { mountMcpHttp } from './mcp/mount-mcp-http';
 
 function ensureDir(dirPath: string): void {
@@ -27,6 +28,15 @@ async function bootstrap(): Promise<void> {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+  // Allow the deployed frontend to call the API. CORS_ORIGIN = comma-separated origins; unset = allow all.
+  const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean);
+  app.enableCors({ origin: corsOrigins?.length ? corsOrigins : true });
+
+  // Behind a hosting proxy (Render, nginx), trust X-Forwarded-For so rate limiting sees real client IPs.
+  if (process.env.TRUST_PROXY === 'true') {
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('RAG Knowledge-Base API')
     .setDescription(
@@ -41,6 +51,10 @@ async function bootstrap(): Promise<void> {
     .addTag('import', 'Upload PDF/DOCX/TXT into SQLite')
     .addTag('kb', 'Knowledge base ingest (text / link / document)')
     .addTag('indexing', 'Reindex SQLite chunks into Upstash Vector')
+    .addApiKey(
+      { type: 'apiKey', in: 'header', name: ADMIN_KEY_HEADER, description: 'Needed for write endpoints when ADMIN_API_KEY is set' },
+      ADMIN_KEY_SECURITY,
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
