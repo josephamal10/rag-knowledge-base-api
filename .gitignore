@@ -9,6 +9,8 @@ dist/
 
 # Editor / local tooling
 .cursor/
+CLAUDE.md
+.claude/
 *.log
 
 # Backups / archives
