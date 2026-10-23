@@ -21,7 +21,7 @@ services:
       - key: UPSTASH_VECTOR_REST_TOKEN
         sync: false
       - key: CORS_ORIGIN
-        sync: false                 # your Vercel URL, e.g. https://rag-knowledge-base.vercel.app
+        value: https://rag-knowledge-base-gray.vercel.app   # only the live frontend may call the API
       - key: ADMIN_API_KEY
         generateValue: true         # locks ingest/edit/delete on the public demo
       - key: RATE_LIMIT_PER_MINUTE
