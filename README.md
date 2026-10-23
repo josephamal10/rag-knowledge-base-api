@@ -10,6 +10,9 @@ A full-stack AI assistant that answers questions using **only** a business's own
 rooms, events and contact details — and says so honestly when something isn't covered.
 Upload PDFs, Word files, web pages or plain text; ask a question; get a streamed answer with the sources it came from.
 
+**🔗 Live demo:** [rag-knowledge-base-gray.vercel.app](https://rag-knowledge-base-gray.vercel.app) · **API docs:** [Swagger](https://rag-knowledge-base-api-b0hp.onrender.com/api)
+<sub>The API runs on a free Render instance that sleeps when idle — the first question after a quiet spell can take up to a minute.</sub>
+
 - **Backend** (`/src`) — NestJS RAG API, built during my internship at **Nanonino** and shared with their permission. Client data, keys and client-specific code have been removed.
 - **Frontend** (`/frontend`) — React chat interface, added afterwards.
 
